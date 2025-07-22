@@ -1,0 +1,44 @@
+# Fichiers système
+.DS_Store
+Thumbs.db
+
+# Fichiers temporaires
+*.tmp
+*.temp
+*~
+
+# Logs
+*.log
+
+# Dossiers de build
+_site/
+.sass-cache/
+.jekyll-cache/
+.jekyll-metadata
+
+# Fichiers de configuration locale
+.env
+.env.local
+
+# Fichiers de sauvegarde
+*.bak
+*.backup
+
+# Fichiers d'éditeur
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Node modules (si utilisé)
+node_modules/
+npm-debug.log*
+
+# Fichiers de données sensibles (à adapter selon vos besoins)
+# *.xlsx
+# *.csv
+# data/
+
+# Fichiers de cache
+.cache/
+

@@ -1,0 +1,34 @@
+# Configuration GitHub Pages
+title: "Cours R en Épidémiologie"
+description: "Formation complète sur l'analyse épidémiologique avec R - Méningite Burkina Faso 2025"
+author: "Direction Générale de la Santé Publique - Burkina Faso"
+
+# GitHub Pages settings
+remote_theme: jekyll/minima
+plugins:
+  - jekyll-feed
+  - jekyll-sitemap
+
+# Site settings
+lang: fr
+timezone: Africa/Ouagadougou
+
+# Navigation
+header_pages:
+  - index.html
+
+# Social links
+github_username: burkina-faso-dgsp
+
+# Build settings
+markdown: kramdown
+highlighter: rouge
+
+# Exclude files
+exclude:
+  - README.md
+  - Gemfile
+  - Gemfile.lock
+  - node_modules
+  - vendor
+
