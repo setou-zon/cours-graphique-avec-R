@@ -927,99 +927,229 @@ save_as_docx(ft, path = "tableau_cas_semaine_flextable.docx")</code></pre>
 
         <p>Analyse spatiale de la mortalité par méningite au Burkina Faso avec cartes choroplèthes spécialisées pour analyser la mortalité par méningite au Burkina Faso.</p>
 
-        <h3>Préparation des données cartographiques</h3>
+        <h3>Script R Complet pour Cartes Choroplèthes</h3>
         <div class="code-block">
-<pre><code class="language-r"># Préparation des données pour cartes
-preparation_donnees_cartes.py
-preparation_donnees_cartes_corrige.py
-preparation_donnees_cartes_final.py
+<pre><code class="language-r"># Chargement des packages nécessaires
+library(sf)          # Données spatiales
+library(ggplot2)     # Graphiques
+library(dplyr)       # Manipulation de données
+library(RColorBrewer) # Palettes de couleurs
 
-# Données générées
-donnees_cartographie.csv
-donnees_agregees_par_district.csv
-correspondance_districts.csv
+# Chargement du shapefile officiel des districts sanitaires
+burkina_sf <- st_read("BFA_District_Sanitaires_2022.shp")
 
-# Script R pour cartes choroplèthes
-script_cartes_choroplethes_BF.R
-cartes_letalite_deces_BF.R</code></pre>
+# Vérification de la structure du shapefile
+head(burkina_sf)
+names(burkina_sf)  # Voir les noms des colonnes
+
+# Agrégation des données par district
+donnees_district <- donnees_clean %>%
+  group_by(district) %>%
+  summarise(
+    total_cas = n(),
+    deces = sum(str_detect(evolution_du_cas, "décès|mort|décédé"), na.rm = TRUE),
+    taux_letalite = round((deces / total_cas) * 100, 2),
+    .groups = 'drop'
+  ) %>%
+  filter(!is.na(district))
+
+# Vérification des noms de districts pour la jointure
+print("Districts dans les données:")
+print(sort(unique(donnees_district$district)))
+print("Districts dans le shapefile:")
+print(sort(unique(burkina_sf$NOM_DIST)))
+
+# Jointure spatiale avec le shapefile
+carte_data <- burkina_sf %>%
+  left_join(donnees_district, by = c("NOM_DIST" = "district")) %>%
+  # Remplacer les NA par 0 pour les districts sans cas
+  mutate(
+    total_cas = ifelse(is.na(total_cas), 0, total_cas),
+    deces = ifelse(is.na(deces), 0, deces),
+    taux_letalite = ifelse(is.na(taux_letalite), 0, taux_letalite)
+  )</code></pre>
+        </div>
+
+        <h3>1. Carte des Décès par District</h3>
+        <div class="code-block">
+<pre><code class="language-r"># Carte des décès avec classification par catégories
+carte_deces <- ggplot(carte_data) +
+  geom_sf(aes(fill = cut(deces, 
+                        breaks = c(-1, 0, 1, 3, 5, Inf),
+                        labels = c("0 décès", "1 décès", "2-3 décès", "4-5 décès", ">5 décès"))),
+          color = "white", size = 0.3) +
+  scale_fill_manual(
+    values = c("0 décès" = "#90EE90",      # Vert clair
+               "1 décès" = "#FFFF99",       # Jaune clair
+               "2-3 décès" = "#FFB366",     # Orange clair
+               "4-5 décès" = "#FF6B6B",     # Rouge clair
+               ">5 décès" = "#8B0000"),     # Rouge foncé
+    name = "Nombre de décès",
+    na.value = "grey90"
+  ) +
+  labs(
+    title = "Décès par District Sanitaire - Méningite Burkina Faso 2025",
+    subtitle = paste("Total:", sum(carte_data$deces, na.rm = TRUE), "décès sur", 
+                     sum(carte_data$total_cas, na.rm = TRUE), "cas"),
+    caption = "Source: Direction Générale de la Santé Publique - Burkina Faso"
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", color = "#8B7355"),
+    plot.subtitle = element_text(size = 12, color = "#A0956A"),
+    plot.caption = element_text(size = 10, color = "#6B5B47"),
+    legend.position = "right",
+    legend.title = element_text(face = "bold", color = "#8B7355"),
+    legend.text = element_text(color = "#6B5B47")
+  ) +
+  # Ajouter une flèche du Nord
+  annotation_north_arrow(location = "tl", which_north = "true", 
+                        style = north_arrow_fancy_orienteering) +
+  # Ajouter une échelle
+  annotation_scale(location = "bl")
+
+# Sauvegarder la carte
+ggsave("carte_deces_districts_BF.png", carte_deces, 
+       width = 12, height = 8, dpi = 300, bg = "white")
+
+print(carte_deces)</code></pre>
+        </div>
+
+        <h3>2. Carte du Taux de Létalité</h3>
+        <div class="code-block">
+<pre><code class="language-r"># Carte du taux de létalité
+carte_letalite <- ggplot(carte_data) +
+  geom_sf(aes(fill = cut(taux_letalite, 
+                        breaks = c(-1, 0, 2, 5, 10, Inf),
+                        labels = c("0%", "0-2%", "2-5%", "5-10%", ">10%"))),
+          color = "white", size = 0.3) +
+  scale_fill_manual(
+    values = c("0%" = "#90EE90",           # Vert clair
+               "0-2%" = "#FFFF99",         # Jaune clair  
+               "2-5%" = "#FFB366",         # Orange clair
+               "5-10%" = "#FF6B6B",        # Rouge clair
+               ">10%" = "#8B0000"),        # Rouge foncé
+    name = "Taux de létalité (%)",
+    na.value = "grey90"
+  ) +
+  labs(
+    title = "Taux de Létalité par District Sanitaire - Méningite Burkina Faso 2025",
+    subtitle = paste("Taux national:", 
+                     round(sum(carte_data$deces, na.rm = TRUE) / 
+                           sum(carte_data$total_cas, na.rm = TRUE) * 100, 2), "%"),
+    caption = "Source: Direction Générale de la Santé Publique - Burkina Faso"
+  ) +
+  theme_void() +
+  theme(
+    plot.title = element_text(size = 14, face = "bold", color = "#8B7355"),
+    plot.subtitle = element_text(size = 12, color = "#A0956A"),
+    plot.caption = element_text(size = 10, color = "#6B5B47"),
+    legend.position = "right",
+    legend.title = element_text(face = "bold", color = "#8B7355"),
+    legend.text = element_text(color = "#6B5B47")
+  ) +
+  # Ajouter une flèche du Nord
+  annotation_north_arrow(location = "tl", which_north = "true", 
+                        style = north_arrow_fancy_orienteering) +
+  # Ajouter une échelle
+  annotation_scale(location = "bl")
+
+# Sauvegarder la carte
+ggsave("carte_letalite_districts_BF.png", carte_letalite, 
+       width = 12, height = 8, dpi = 300, bg = "white")
+
+print(carte_letalite)</code></pre>
+        </div>
+
+        <h3>3. Carte Combinée (Décès et Létalité)</h3>
+        <div class="code-block">
+<pre><code class="language-r"># Créer une carte combinée avec les deux analyses
+library(patchwork)
+
+carte_combinee <- carte_deces + carte_letalite +
+  plot_layout(ncol = 2) +
+  plot_annotation(
+    title = "Analyse Spatiale de la Mortalité par Méningite - Burkina Faso 2025",
+    subtitle = "Comparaison des décès absolus et du taux de létalité par district sanitaire",
+    caption = "Source: Direction Générale de la Santé Publique - Burkina Faso",
+    theme = theme(
+      plot.title = element_text(size = 16, face = "bold", color = "#8B7355"),
+      plot.subtitle = element_text(size = 14, color = "#A0956A"),
+      plot.caption = element_text(size = 12, color = "#6B5B47")
+    )
+  )
+
+# Sauvegarder la carte combinée
+ggsave("cartes_mortalite_combinees_BF.png", carte_combinee, 
+       width = 20, height = 10, dpi = 300, bg = "white")
+
+print(carte_combinee)</code></pre>
         </div>
 
         <div class="result-container">
-            <div class="map-container">
-                <div class="map-item">
-                    <h4>Carte des Décès par District</h4>
-                    <svg class="map-svg" viewBox="0 0 400 300">
-                        <!-- Carte simplifiée du Burkina Faso -->
-                        <rect x="50" y="50" width="60" height="40" class="district" fill="#90EE90" title="Ouagadougou: 5 décès"/>
-                        <rect x="120" y="50" width="50" height="40" class="district" fill="#FFFF99" title="Bobo-Dioulasso: 3 décès"/>
-                        <rect x="180" y="50" width="45" height="40" class="district" fill="#FFB366" title="Koudougou: 2 décès"/>
-                        <rect x="50" y="100" width="55" height="35" class="district" fill="#90EE90" title="Banfora: 1 décès"/>
-                        <rect x="115" y="100" width="60" height="35" class="district" fill="#FFFF99" title="Tenkodogo: 2 décès"/>
-                        <rect x="185" y="100" width="50" height="35" class="district" fill="#90EE90" title="Gaoua: 1 décès"/>
-                        <rect x="50" y="145" width="70" height="40" class="district" fill="#FFB366" title="Dori: 3 décès"/>
-                        <rect x="130" y="145" width="55" height="40" class="district" fill="#FFFF99" title="Fada: 2 décès"/>
-                        <rect x="195" y="145" width="45" height="40" class="district" fill="#90EE90" title="Diapaga: 1 décès"/>
-                        <rect x="80" y="195" width="60" height="35" class="district" fill="#FFB366" title="Djibo: 3 décès"/>
-                        <rect x="150" y="195" width="50" height="35" class="district" fill="#FFFF99" title="Manga: 2 décès"/>
-                        <rect x="210" y="195" width="40" height="35" class="district" fill="#90EE90" title="Bogandé: 1 décès"/>
-                    </svg>
-                    <div class="legend">
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #90EE90;"></div>
-                            <span>0-1 décès</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #FFFF99;"></div>
-                            <span>2-3 décès</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #FFB366;"></div>
-                            <span>4-5 décès</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #FF6B6B;"></div>
-                            <span>>5 décès</span>
-                        </div>
-                    </div>
-                </div>
-
-                <div class="map-item">
-                    <h4>Carte du Taux de Létalité</h4>
-                    <svg class="map-svg" viewBox="0 0 400 300">
-                        <!-- Carte simplifiée du Burkina Faso pour létalité -->
-                        <rect x="50" y="50" width="60" height="40" class="district" fill="#90EE90" title="Ouagadougou: 1.2%"/>
-                        <rect x="120" y="50" width="50" height="40" class="district" fill="#FFFF99" title="Bobo-Dioulasso: 2.8%"/>
-                        <rect x="180" y="50" width="45" height="40" class="district" fill="#FFB366" title="Koudougou: 4.1%"/>
-                        <rect x="50" y="100" width="55" height="35" class="district" fill="#90EE90" title="Banfora: 0.8%"/>
-                        <rect x="115" y="100" width="60" height="35" class="district" fill="#FFFF99" title="Tenkodogo: 3.2%"/>
-                        <rect x="185" y="100" width="50" height="35" class="district" fill="#90EE90" title="Gaoua: 1.5%"/>
-                        <rect x="50" y="145" width="70" height="40" class="district" fill="#FFB366" title="Dori: 5.2%"/>
-                        <rect x="130" y="145" width="55" height="40" class="district" fill="#FFFF99" title="Fada: 2.9%"/>
-                        <rect x="195" y="145" width="45" height="40" class="district" fill="#90EE90" title="Diapaga: 1.8%"/>
-                        <rect x="80" y="195" width="60" height="35" class="district" fill="#FF6B6B" title="Djibo: 7.1%"/>
-                        <rect x="150" y="195" width="50" height="35" class="district" fill="#FFB366" title="Manga: 4.5%"/>
-                        <rect x="210" y="195" width="40" height="35" class="district" fill="#FFFF99" title="Bogandé: 2.1%"/>
-                    </svg>
-                    <div class="legend">
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #90EE90;"></div>
-                            <span>0-2%</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #FFFF99;"></div>
-                            <span>2-5%</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #FFB366;"></div>
-                            <span>5-10%</span>
-                        </div>
-                        <div class="legend-item">
-                            <div class="legend-color" style="background: #FF6B6B;"></div>
-                            <span>>10%</span>
-                        </div>
-                    </div>
-                </div>
+            <div style="text-align: center; margin: 25px 0;">
+                <img src="/home/ubuntu/upload/image.png" alt="Carte des décès par district - Burkina Faso" 
+                     style="max-width: 100%; height: auto; border-radius: 8px; box-shadow: 0 4px 15px rgba(0,0,0,0.1);">
+                <p style="margin-top: 15px; color: #8B7355; font-weight: 600; font-size: 1.1rem;">
+                    Carte des Décès par District Sanitaire - Méningite Burkina Faso 2025
+                </p>
+                <p style="color: #6B5B47; font-size: 0.9rem;">
+                    Carte générée avec le shapefile officiel BFA_District_Sanitaires_2022.shp
+                </p>
             </div>
+        </div>
+
+        <h3>4. Analyses Statistiques Automatiques</h3>
+        <div class="code-block">
+<pre><code class="language-r"># Analyses statistiques des données cartographiques
+# 1. Statistiques descriptives par district
+stats_districts <- carte_data %>%
+  st_drop_geometry() %>%  # Enlever la géométrie pour les calculs
+  filter(total_cas > 0) %>%
+  arrange(desc(deces)) %>%
+  select(NOM_DIST, total_cas, deces, taux_letalite)
+
+print("Top 10 des districts avec le plus de décès:")
+print(head(stats_districts, 10))
+
+# 2. Répartition par catégories de décès
+repartition_deces <- carte_data %>%
+  st_drop_geometry() %>%
+  mutate(
+    categorie_deces = cut(deces, 
+                         breaks = c(-1, 0, 1, 3, 5, Inf),
+                         labels = c("0 décès", "1 décès", "2-3 décès", "4-5 décès", ">5 décès"))
+  ) %>%
+  count(categorie_deces) %>%
+  mutate(pourcentage = round(n / sum(n) * 100, 1))
+
+print("Répartition des districts par nombre de décès:")
+print(repartition_deces)
+
+# 3. Répartition par catégories de létalité
+repartition_letalite <- carte_data %>%
+  st_drop_geometry() %>%
+  filter(total_cas > 0) %>%  # Seulement les districts avec des cas
+  mutate(
+    categorie_letalite = cut(taux_letalite, 
+                            breaks = c(-1, 0, 2, 5, 10, Inf),
+                            labels = c("0%", "0-2%", "2-5%", "5-10%", ">10%"))
+  ) %>%
+  count(categorie_letalite) %>%
+  mutate(pourcentage = round(n / sum(n) * 100, 1))
+
+print("Répartition des districts par taux de létalité:")
+print(repartition_letalite)
+
+# 4. Districts prioritaires (létalité > 5% ET cas > 5)
+districts_prioritaires <- carte_data %>%
+  st_drop_geometry() %>%
+  filter(taux_letalite > 5 & total_cas > 5) %>%
+  arrange(desc(taux_letalite)) %>%
+  select(NOM_DIST, total_cas, deces, taux_letalite)
+
+print("Districts prioritaires pour intervention (létalité > 5% et cas > 5):")
+print(districts_prioritaires)</code></pre>
         </div>
 
         <div class="highlight-box">
